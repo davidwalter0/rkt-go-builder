@@ -1,6 +1,10 @@
 #!/bin/bash
 set -e
 # set -x
+user=${LOGNAME}
+golangversion=1.7.5
+echo Using golangversion=${golangversion}
+
 ACI_REGISTRY=${1}
 if [[ ! ${ACI_REGISTRY:-} ]] ; then
     echo Usage: ${0##*/} ACI_REGISTRY
@@ -42,7 +46,11 @@ sudo ${DIR}/bin/acbuild environment add PATH /go/bin:/usr/local/go/bin:/usr/loca
 sudo ${DIR}/bin/acbuild run -- apt-get clean
 sudo ${DIR}/bin/acbuild run -- apt-get autoclean
 
-if ${DIR}/bin/acbuild write --overwrite ${acifile} ; then
+if sudo ${DIR}/bin/acbuild write --overwrite ${acifile} ; then
+    if [[ ! -e ${DIR}/aci-signing.key.asc ]]; then
+        bin/gpg-sign-tool genkey aci-signing
+    fi
     ${DIR}/bin/gpg-sign-tool sign ${acifile} ${DIR}/aci-signing.key.asc
 fi
 ${DIR}/bin/acbuild end
+sudo chown ${user}.${user} -R .

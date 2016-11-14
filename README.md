@@ -40,18 +40,18 @@ With a repo list like the following, you might run multiple builds.
 **signing**
 
 For testing to simplify key generation, image signing and
-verification, the initial version uses bin/go-gpg-tool a modified
+verification, the initial version uses bin/gpg-sign-tool a modified
 version of the golang tool
-(quickpgp)[https://github.com/thwarted/quickpgp].
+(quickpgp)[https://github.com/thwarted/quickpgp]
 
 
-- set the environment variables for (go-gpg-tool )[https://github.com/davidwalter0/go-gpg-tool]
+- set the environment variables for (bin/gpg-sign-tool )[https://github.com/davidwalter0/bin/gpg-sign-tool]
   - [ ] KEY_USE_NAME    : the user name may be human readable - including spaces
   - [ ] KEY_USE_COMMENT : the key use comment
   - [ ] KEY_USE_EMAIL   : the full email address
-- bin/go-gpg-tool genkey aci-signing
-- bin/go-gpg-tool sign aci-file aci-signing.key.asc
-- bin/go-gpg-tool verify aci-file aci-signing.pub.asc
+- bin/gpg-sign-tool genkey aci-signing
+- bin/gpg-sign-tool sign aci-file aci-signing.key.asc
+- bin/gpg-sign-tool verify aci-file aci-signing.pub.asc
 
 ---
 **rkt install**
