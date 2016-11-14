@@ -1,0 +1,45 @@
+#!/bin/bash
+set -e
+# set -x
+golangversion=1.7.5
+echo Using golangversion=${golangversion}
+
+ACI_REGISTRY=${1}
+if [[ ! ${ACI_REGISTRY:-} ]] ; then
+    echo Usage: ${0##*/} ACI_REGISTRY
+    echo Required argument ACI_REGISTRY not given
+    exit 1
+fi
+
+DIR=$(dirname $(readlink -f ${0}))
+DIR=${DIR%/scripts}
+if [[ ${functions:-} ]]; then
+    functions=${functions%/}/scripts/functions
+else
+    functions=./scripts/functions
+fi
+. ${functions}
+
+acifile=${acipath}/debian-xenial-${kernel}-${platform}.aci
+
+mkdir -p ${acipath}
+
+sudo ${DIR}/bin/acbuild begin
+sudo apt install -y debootstrap systemd-container &> /dev/null
+sudo debootstrap --variant=minbase xenial .acbuild/currentaci/rootfs/ &> /dev/null
+sudo ${DIR}/bin/acbuild set-name ${ACI_REGISTRY}/debian-xenial-base
+
+sudo ${DIR}/bin/acbuild copy scripts/entrypoint.sh /entrypoint.sh
+sudo ${DIR}/bin/acbuild run -- chown root.root /entrypoint.sh
+sudo ${DIR}/bin/acbuild set-exec /entrypoint.sh
+sudo ${DIR}/bin/acbuild run -- apt update -y &> /dev/null
+sudo ${DIR}/bin/acbuild set-working-directory /
+sudo ${DIR}/bin/acbuild environment add PATH /usr/sbin:/usr/bin:/sbin:/bin
+
+sudo ${DIR}/bin/acbuild run -- apt-get clean
+sudo ${DIR}/bin/acbuild run -- apt-get autoclean
+
+if ${DIR}/bin/acbuild write --overwrite ${acifile} ; then
+    ${DIR}/bin/gpg-sign-tool sign ${acifile} ${DIR}/aci-signing.key.asc
+fi
+${DIR}/bin/acbuild end

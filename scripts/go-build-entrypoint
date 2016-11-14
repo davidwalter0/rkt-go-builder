@@ -1,0 +1,78 @@
+#!/bin/bash -x
+
+# run with build args you require
+
+# Default to output bin files to /go/bin,unless an environment
+# variable is set.
+if [[ ! ${TARGET:-} ]]; then
+    TARGET=/go/bin
+fi
+
+export PATH=${TARGET}:/usr/local${TARGET}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ls -ald /*
+cd /build
+# git clone ${1} ./
+
+go get ${1}
+
+cd ${GOPATH}/src/${1}
+repo=${1##*/}
+if [[ ${repo} == "kubernetes" ]]; then
+    go get -u github.com/jteeuwen/go-bindata/go-bindata
+fi
+
+if [[ ${BUILD_BRANCH:-} ]] ; then
+    git checkout ${BUILD_BRANCH}
+fi
+
+case ${repo} in
+    calico-cni)
+        make binary ;;
+    rkt)
+        apt -qq -y update;
+        apt install -y libtspi-dev autoconf cpio squashfs-tools xz-utils libacl1-dev libsystemd-dev file bc
+        ./autogen.sh
+        ./configure
+        make -j 4
+        ;;
+    *)
+        if [[ -e Makefile ]]; then
+            make
+        elif [[ -x ./build ]]; then
+            ./build
+        elif [[ -x ./build.sh ]]; then
+            ./build.sh
+        else
+            go build
+            go install
+        fi
+        ;;
+esac
+
+ls -ald /*
+copydir=bin
+
+if [[ -e bin/${repo} ]]; then
+    copydir=bin
+    ls -ald ${copydir}/*|grep -Ev '.sh$'
+    cp $(ls -1 ${copydir}/*|grep -vE '.sh$') ${TARGET}
+elif [[ -e dist/${repo} ]]; then
+    copydir=dist
+    ls -ald ${copydir}/*|grep -Ev '.sh$'
+    cp $(ls -1 ${copydir}/*|grep -vE '.sh$') ${TARGET}
+elif [[ ${repo} == "kubernetes" ]]; then
+    copydir=_output/local/bin/linux/amd64
+    ls -ald ${copydir}/*|grep -Ev '.sh$'
+    cp $(ls -1 ${copydir}/{kube*,hyper*,src,linkcheck,gen*}|grep -vE '.sh$') ${TARGET}
+elif [[ ${repo} == "rkt" ]]; then
+    REF=$(git tag --points-at $(git log --format=%h -n1))
+    BUILD_DIR=build-rkt-${REF#v}
+    cp ${PWD}/${BUILD_DIR}/bin/{actool,rkt,stage1-coreos.aci,stage1-fly.aci,stage1-kvm.aci} ${TARGET}
+else
+    copydir=$(ls -1t | head -1)
+    # last ditch attempt to find a bin dir. is the most recently
+    # modified directory the output directory?
+    cp $(ls -1 ${copydir}/*|grep -vE '.sh$') ${TARGET}    
+fi
+
+ls -alt ${GOPATH}/src/${1}/* | head -3

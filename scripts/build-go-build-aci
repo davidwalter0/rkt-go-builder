@@ -1,0 +1,48 @@
+#!/bin/bash
+set -e
+# set -x
+ACI_REGISTRY=${1}
+if [[ ! ${ACI_REGISTRY:-} ]] ; then
+    echo Usage: ${0##*/} ACI_REGISTRY
+    echo Required argument ACI_REGISTRY not given
+    exit 1
+fi
+
+osrelease=xenial
+golangversion=1.7.3
+DIR=$(dirname $(readlink -f ${0}))
+DIR=${DIR%/scripts}
+if [[ ${functions:-} ]]; then
+    functions=${functions%/}/scripts/functions
+else
+    functions=./scripts/functions
+fi
+. ${functions}
+
+acifile=${acipath}/go-builder-go${golangversion}-${kernel}-${platform}.aci
+mkdir -p ${acipath}
+
+base=${acipath}/debian-xenial-${kernel}-${platform}.aci
+sudo ${DIR}/bin/acbuild begin ${base}
+sudo ${DIR}/bin/acbuild copy scripts/go-build-entrypoint /entrypoint.sh
+sudo ${DIR}/bin/acbuild run -- chown root.root /entrypoint.sh
+sudo ${DIR}/bin/acbuild set-exec /entrypoint.sh
+sudo ${DIR}/bin/acbuild set-name ${ACI_REGISTRY}/go-builder
+sudo ${DIR}/bin/acbuild run -- mkdir -p /usr/local/go /go/{bin,src,pkg} /build
+sudo ${DIR}/bin/acbuild mount add target /go/bin
+sudo ${DIR}/bin/acbuild environment add GOROOT /usr/local/go
+sudo ${DIR}/bin/acbuild environment add GOPATH /go
+sudo ${DIR}/bin/acbuild run -- apt-get install -y wget make git iproute2 gcc iputils-ping
+
+sudo ${DIR}/bin/acbuild run -- wget -O /go${golangversion}.${kernel}-${platform}.tar.gz https://storage.googleapis.com/golang/go${golangversion}.${kernel}-${platform}.tar.gz
+sudo ${DIR}/bin/acbuild run -- tar -C /usr/local/ -xzf /go${golangversion}.${kernel}-${platform}.tar.gz
+sudo ${DIR}/bin/acbuild run -- rm -f /go${golangversion}.${kernel}-${platform}.tar.gz
+sudo ${DIR}/bin/acbuild environment add PATH /go/bin:/usr/local/go/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+sudo ${DIR}/bin/acbuild run -- apt-get clean
+sudo ${DIR}/bin/acbuild run -- apt-get autoclean
+
+if ${DIR}/bin/acbuild write --overwrite ${acifile} ; then
+    ${DIR}/bin/gpg-sign-tool sign ${acifile} ${DIR}/aci-signing.key.asc
+fi
+${DIR}/bin/acbuild end

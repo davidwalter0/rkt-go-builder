@@ -1,0 +1,151 @@
+#!/bin/bash
+export email=rktsalt@gmail.com
+export scripts=${DIR}/scripts
+export keyring_path=${DIR}/keyring
+export real_name="David Walter"
+export acipath=${DIR}/aci
+
+export kernel=$(uname --kernel-name); 
+export kernel=${kernel,,}
+export platform=$(uname --processor)
+export platform=$(case ${platform} in x86_64) echo amd64;; *) echo ${platform};; esac)
+
+if ((0)); then
+function exit-and-cleanup
+{
+    echo Usage ${0##*/} --file=acifile
+    echo ${0##*/} exiting ...
+    exit 1
+}
+
+function generate-key
+{
+    mkdir -p ${keyring_path}
+    if (( generate_key )) ; then
+        if ! [[ -e ${keyring_path}/rkt.pub ]]; then
+            create_description
+            pushd ${keyring_path}
+            gpg --batch --gen-key ${keyring_path}/gpg-batch; 
+            popd;
+        else
+            echo "Key already present continuing"
+            return 1
+        fi
+    else
+        echo "generate_key not set: exiting. . ."
+        exit 0
+    fi
+    return 0
+}
+
+function list-keys
+{
+    gpg --no-default-keyring --options /dev/null --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --list-keys 2>&1 
+    text=$(gpg --no-default-keyring --options /dev/null --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --list-keys 2>/dev/null );
+    if [[ ${text} =~ .*pub\ \ \ (4096|2048)R/([a-fA-F0-9]*)\ .* ]]; then
+        export key="${BASH_REMATCH[2]}"
+        return 0
+    else
+        echo Self signing will fail because the query regular expression failed.
+        return 1
+    fi
+    return 0
+}
+
+function self-sign
+{
+    echo self sign the key
+    echo answer 5 to trust ultimately and y enter
+    echo gpg --no-default-keyring --options /dev/null --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --edit-key ${key} trust 
+    ( echo 5; echo y ) | gpg --no-default-keyring --options /dev/null --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --edit-key ${key} trust 
+}
+
+function export-key
+{
+    echo export the key
+    echo "gpg --no-default-keyring --options /dev/null --armor --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --export ${email} > ${keyring_path}/pubkeys.gpg"
+    gpg --no-default-keyring --options /dev/null --armor --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --export ${email} > ${keyring_path}/pubkeys.gpg 
+}
+
+function verify-aci-file-extension
+{
+    local file=${1}
+    if [[ ${file%.aci} == ${file} ]]; then
+        file=${file}.aci
+    fi
+
+    if [[ ! -e ${file} ]]; then
+        echo "File name [${file}] invalid. File name should end in .aci"
+        exit-and-cleanup
+    fi
+    echo ${file}
+}
+
+function detach-signature
+{
+    local file=${1}
+    file=$(verify-aci-file-extension ${file})
+    echo sign this script [$0] file with a detached signature
+    rm -f ${file}.asc
+    echo gpg --no-default-keyring --options /dev/null --armor --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --output ${file}.asc --detach-sig ${file}
+    ( echo 5; echo y ) |gpg --no-default-keyring --options /dev/null --armor --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --output ${file}.asc --detach-sig ${file} 
+}
+
+function verify
+{
+    echo gpg --no-default-keyring --options /dev/null --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --verify ${file}.asc ${file} 
+    gpg --no-default-keyring --options /dev/null --secret-keyring ${keyring_path}/rkt.sec --keyring ${keyring_path}/rkt.pub --verify ${file}.asc ${file} 
+}
+
+function fingerprint
+{
+    echo "gpg --no-default-keyring --options /dev/null --fingerprint --keyring ${keyring_path}/rkt.pub ${email}|grep fingerprint| cut -f 2 -d= | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]'"
+    gpg --no-default-keyring --options /dev/null --fingerprint --keyring ${keyring_path}/rkt.pub ${email}|grep fingerprint| cut -f 2 -d= | tr -d "[:space:]" | tr '[:upper:]' '[:lower:]' 
+    fingerprint=$(gpg --no-default-keyring --options /dev/null --fingerprint --keyring ${keyring_path}/rkt.pub ${email} | grep fingerprint | cut -f 2 -d = | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]' )
+    echo
+    echo fingerprint=${fingerprint}
+}
+
+function create_description
+{
+    cat >  ${keyring_path}/gpg-batch <<EOF
+%echo Generating a default key
+Key-Type: RSA 
+Key-Length: 4096
+Subkey-Type: RSA 
+Subkey-Length: 4096
+Name-Real: ${real_name}
+Name-Comment: ACI signing key
+Name-Email: ${email}
+Expire-Date: 0
+Passphrase: rkt
+%pubring rkt.pub
+%secring rkt.sec
+%commit
+%echo done
+EOF
+
+}
+
+# function create_description
+# {
+#     cat >  ${keyring_path}/gpg-batch <<EOF
+# %echo Generating a default key
+# Key-Type: RSA 
+# Key-Length: 4096
+# Subkey-Type: RSA 
+# Subkey-Length: 4096
+# Name-Real: ${real_name}
+# Name-Comment: ACI signing key
+# Name-Email: ${email}
+# Expire-Date: 0
+# Passphrase: rkt
+# %pubring rkt.pub
+# %secring rkt.sec
+# %commit
+# %echo done
+# EOF
+
+# }
+
+fi
